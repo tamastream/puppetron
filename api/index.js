@@ -1,4 +1,3 @@
-const { CAPTCHA_SECRET, NOW_REGION, VERCEL_REGION } = process.env;
 const fs = require('fs');
 const http = require('http');
 const { URL } = require('url');
@@ -6,12 +5,7 @@ const { URL } = require('url');
 const chrome = require('chrome-aws-lambda');
 const puppeteer = require('puppeteer-core');
 
-const { verify } = require('hcaptcha');
-
-const isDev =
-  NOW_REGION === 'dev1' ||
-  VERCEL_REGION === 'dev1' ||
-  (!NOW_REGION && !VERCEL_REGION);
+const isDev = true;
 // console.log({ isDev });
 
 const jimp = require('jimp');
@@ -116,10 +110,6 @@ async function handler(req, res) {
       throw new Error('Invalid URL');
     }
 
-    const token = searchParams.get('token');
-    if (!token) throw new Error('No token');
-    await verify(CAPTCHA_SECRET, token);
-
     const { hostname, pathname } = new URL(pageURL);
     const path = decodeURIComponent(pathname);
 
@@ -157,7 +147,7 @@ async function handler(req, res) {
           ignoreHTTPSErrors: true,
           ...(isDev
             ? {
-                headless: false,
+                headless: true,
                 executablePath: localChrome,
               }
             : {
@@ -426,11 +416,10 @@ async function handler(req, res) {
 
 module.exports = handler;
 
-if (isDev) {
-  const PORT = process.env.PORT || 3000;
-  const listen = () => console.log(`Listening on ${PORT}...`);
-  require('http').createServer(handler).listen(PORT, listen);
-}
+const PORT = process.env.PORT || 3000;
+const listen = () => console.log(`Listening on ${PORT}...`);
+require('http').createServer(handler).listen(PORT, listen);
+
 
 process.on('SIGINT', () => {
   if (browser) browser.close();
