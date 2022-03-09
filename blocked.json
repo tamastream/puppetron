@@ -26,5 +26,7 @@
   "go-mpulse.net",
   "doubleclick.net/pixel",
   "cx.atdmt.com",
-  "sb.scorecardresearch.com"
+  "sb.scorecardresearch.com",
+  "\/api\/tracks\/\\d+\/stream",
+  "\/api\/csrf\/restore"
 ]
