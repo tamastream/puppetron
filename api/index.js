@@ -29,6 +29,15 @@ const cache = new LRU({
 });
 setInterval(() => cache.prune(), 1000 * 60); // Prune every minute
 
+//killall chrome every 30 minutes
+const treekill = require('tree-kill');
+setInterval(() => {
+           if(browser){
+                treekill(browser.process().pid, 'SIGKILL');
+                console.log('killed browser after 30 minutes');
+           }
+        }, 1000 * 60 * 30);
+
 const blocked = require('../blocked.json');
 const blockedRegExp = new RegExp('(' + blocked.join('|') + ')', 'i');
 
