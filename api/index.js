@@ -35,6 +35,7 @@ setInterval(() => {
            if(browser){
                 treekill(browser.process().pid, 'SIGKILL');
                 console.log('killed browser after 30 minutes');
+                browser = null;
            }
         }, 1000 * 60 * 30);
 
