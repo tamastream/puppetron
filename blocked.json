@@ -27,6 +27,10 @@
   "doubleclick.net/pixel",
   "cx.atdmt.com",
   "sb.scorecardresearch.com",
+  "stats.tamastream.online",
   "\/api\/tracks\/\\d+\/stream",
+  "\/api\/tracks\/image\/",
+  "\/api\/userss\/image\/",
+  "\/static\/media\/.*\\.png",
   "\/api\/csrf\/restore"
 ]
