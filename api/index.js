@@ -12,32 +12,30 @@ const jimp = require('jimp');
 const pTimeout = require('p-timeout');
 const LRU = require('lru-cache');
 
-const cache = new LRU({
+
+const txtcache = new LRU({
   max: process.env.CACHE_SIZE || Infinity,
-  maxAge: 1000 * 60, // 1 minute
+  maxAge: 1000 * 60 * 15, // 15 minutes
   noDisposeOnSet: true,
-  dispose: async (url, page) => {
+  dispose: async (url, txtpage) => {
     try {
-      if (page && page.close) {
-        console.log('🗑 Disposing ' + url);
-        page.removeAllListeners();
-        await page.deleteCookie(await page.cookies());
-        await page.close();
+      if (txtpage) {
+        console.log('🗑 Disposing txt ' + url);
       }
     } catch (e) {}
   },
 });
-setInterval(() => cache.prune(), 1000 * 60); // Prune every minute
+setInterval(() => txtcache.prune(), 1000 * 60); // Prune every minute
 
 //killall chrome every 30 minutes
 const treekill = require('tree-kill');
 setInterval(() => {
-           if(browser){
-                treekill(browser.process().pid, 'SIGKILL');
-                console.log('killed browser after 30 minutes');
-                browser = null;
-           }
-        }, 1000 * 60 * 30);
+	   if(browser){
+		treekill(browser.process().pid, 'SIGKILL');
+		console.log('killed browser after 30 minutes');
+		browser = null;
+	   }
+	}, 1000 * 60 * 30);
 
 const blocked = require('../blocked.json');
 const blockedRegExp = new RegExp('(' + blocked.join('|') + ')', 'i');
@@ -74,7 +72,7 @@ async function handler(req, res) {
     res.end(
       JSON.stringify(
         {
-          pages: cache.keys(),
+          txtpages: txtcache.keys(),
           process: {
             versions: process.versions,
             memoryUsage: process.memoryUsage(),
@@ -87,7 +85,7 @@ async function handler(req, res) {
     return;
   }
 
-  const [_, action] = req.url.match(/^\/(screenshot|render|pdf)/i) || [
+  const [_, action] = req.url.match(/^\/(render)/i) || [
     '',
     '',
     '',
@@ -101,12 +99,12 @@ async function handler(req, res) {
     return;
   }
 
-  if (cache.itemCount > 20) {
+  if (txtcache.itemCount > 1000) {
     res.writeHead(420, {
       'content-type': 'text/plain',
     });
     res.end(
-      `There are ${cache.itemCount} pages in the current instance now. Please try again in few minutes.`,
+      `There are ${txtcache.itemCount} pages in the current instance now. Please try again in few minutes.`,
     );
     return;
   }
@@ -149,7 +147,16 @@ async function handler(req, res) {
     const width = parseInt(searchParams.get('width'), 10) || 1024;
     const height = parseInt(searchParams.get('height'), 10) || 768;
 
-    page = cache.get(pageURL);
+    txtpage = txtcache.get(pageURL);
+    if(txtpage){
+	console.log('returning cached txtpage for '+pageURL);
+	res.writeHead(200, {
+      		'content-type': 'text/html; charset=utf-8',
+      		'cache-control': 'public,max-age=31536000',
+    	});
+    	res.end(txtpage);
+	return;
+    }
     if (!page) {
       if (!browser) {
         console.log('🚀 Launch browser!');
@@ -157,16 +164,16 @@ async function handler(req, res) {
           ignoreHTTPSErrors: true,
           ...(isDev
             ? {
-                args: [
-                      '--no-sandbox',
-                      '--disable-setuid-sandbox',
-                      '--disable-dev-shm-usage',
-                      '--disable-accelerated-2d-canvas',
-                      '--no-first-run',
-                      '--no-zygote',
-                      '--single-process', // <- this one doesn't works in Windows
-                      '--disable-gpu'
-                    ],
+		args: [
+		      '--no-sandbox',
+		      '--disable-setuid-sandbox',
+		      '--disable-dev-shm-usage',
+		      '--disable-accelerated-2d-canvas',
+		      '--no-first-run',
+		      '--no-zygote',
+		      '--single-process', // <- this one doesn't works in Windows
+		      '--disable-gpu'
+		    ],
                 headless: true,
                 executablePath: localChrome,
               }
@@ -320,26 +327,7 @@ async function handler(req, res) {
           'cache-control': 'public,max-age=31536000',
         });
         res.end(content);
-        break;
-      }
-      case 'pdf': {
-        const format = searchParams.get('format') || null;
-        const pageRanges = searchParams.get('pageRanges') || '';
-
-        const pdf = await pTimeout(
-          page.pdf({
-            format,
-            pageRanges,
-          }),
-          10 * 1000,
-          'PDF timed out',
-        );
-
-        res.writeHead(200, {
-          'content-type': 'application/pdf',
-          'cache-control': 'public,max-age=31536000',
-        });
-        res.end(pdf, 'binary');
+	txtcache.set(pageURL, content);
         break;
       }
       default: {
@@ -391,21 +379,7 @@ async function handler(req, res) {
 
     actionDone = true;
     console.log('💥 Done action: ' + action);
-    if (!cache.has(pageURL)) {
-      cache.set(pageURL, page);
-
-      // Try to stop all execution
-      page.frames().forEach((frame) => {
-        frame.evaluate(() => {
-          // Clear all timer intervals https://stackoverflow.com/a/6843415/20838
-          for (var i = 1; i < 99999; i++) window.clearInterval(i);
-          // Disable all XHR requests
-          XMLHttpRequest.prototype.send = (_) => _;
-          // Disable all RAFs
-          requestAnimationFrame = (_) => _;
-        });
-      });
-    }
+    page.close();
   } catch (e) {
     if (page) {
       console.error(e);
@@ -413,7 +387,6 @@ async function handler(req, res) {
       page.removeAllListeners();
       page.close();
     }
-    cache.del(pageURL);
     const { message = '' } = e;
     res.writeHead(400, {
       'content-type': 'text/plain',
